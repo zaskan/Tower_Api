@@ -1,0 +1,480 @@
+---
+  - name: Test Tower API Resources methods
+    hosts: localhost
+    gather_facts: no
+    connection: local
+ 
+    vars:
+
+      tower_hostname: "10.0.0.12"
+      test_host_address: "10.0.0.39"
+ 
+    tasks:
+
+      - name: Include Vault file
+        include_vars: mycreds.yml
+
+      - name: Generate Api token
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/users/1/tokens/"
+          method: POST
+          force_basic_auth: yes
+          body_format: json
+          headers:
+            Content-Type: application/json
+          body: '{"description": "API token" ,"application": null, "scope": "write"}'
+          url_username: "{{ admin_username }}"
+          url_password: "{{ admin_password }}"
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: token_json
+      
+      - name: Get token
+        set_fact:
+          tower_api_token: "{{ token_json | json_query('json.token') }}"
+
+      - name: Update license
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/config/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: "{{ license }}"
+          return_content: yes
+          status_code: 200 # He conseguido instalar la licencia pero devuelve 200 en lugar de 201 como pone en la docu
+          validate_certs: no
+
+      - name: Create machine credentials
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/credentials/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"credential_type":1, "user":1, "name":"Vagrant", "kind":"ssh", "inputs": {"username":"{{ machine_user }}", "password": "{{ machine_password }}"}, "become_method": "sudo"}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: credentials
+      
+      - name: Get credential ID
+        set_fact:
+          credential_id: "{{ credentials | json_query('json.id') }}"
+      
+      - name: Create Organization
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/organizations/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"description": "Created for show the api power.","name": "API Corporation"}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: organization
+
+      - name: Get organization ID
+        set_fact:
+          organization_id: "{{ organization | json_query('json.id') }}"
+
+      - name: Create Inventory
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/inventories/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"name": "Inventory created using the Tower API.","organization": "{{ organization_id }}"}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: inventory
+
+      - name: Get inventory ID
+        set_fact:
+          inventory_id: "{{ inventory | json_query('json.id') }}"
+
+      - name: Create group
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/inventories/{{ inventory_id }}/groups/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"name": "API_GROUP", "description": "Group created using the Tower API."}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: group
+
+      - name: Get group ID
+        set_fact:
+          group_id: "{{ group | json_query('json.id') }}"
+
+      - name: Create host
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/groups/{{ group_id }}/hosts/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"name": "{{ test_host_address }}", "description": "Host created using the Tower API."}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: host
+
+      - name: Get host ID
+        set_fact:
+          host_id: "{{ host | json_query('json.id') }}"
+
+      - name: Create user
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/users/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"username": "{{ tower_username }}", "first_name": "Api", "last_name": "created user", "is_superuser": false, "password": "{{ tower_password }}", "email": "a@a.com" }'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: user
+
+      - name: Get user ID
+        set_fact:
+          user_id: "{{ user | json_query('json.id') }}"
+
+      - name: Get inventory admin role ID
+        set_fact:
+          admin_role_id: "{{ inventory | json_query('json.summary_fields.object_roles.admin_role.id')}}"
+
+      - name: Grant admin role to the new user
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/users/{{ user_id }}/roles/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"id": {{ admin_role_id }} }'
+          return_content: yes
+          status_code: 204  # He conseguido instalar la licencia pero devuelve 204 en lugar de 201 como pone en la docu
+          validate_certs: no
+        register: user
+
+      - name: Create SCM credentials
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/credentials/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"credential_type":2, "user":1, "name":"SCM", "kind":"scm", "inputs": {"username":"{{ git_username }}", "password": "{{ git_password }}"}}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: scm_credentials
+      
+      - name: Get credential ID
+        set_fact:
+          scm_credential_id: "{{ scm_credentials | json_query('json.id')}}"
+
+      - name: Create a project
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/organizations/{{ organization_id }}/projects/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"name":"API Project", "scm_type":"git", "scm_url":"https://github.com/zaskan/RedHatLabs.git", "credential":"{{ scm_credential_id }}", "scm_update_on_launch": true }'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: project
+
+      - name: Get project ID
+        set_fact:
+          project_id: "{{ project | json_query('json.id')}}"
+
+      - name: Wait for project to be synced
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/projects/{{ project_id }}/"
+          method: GET
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          return_content: yes
+          status_code: 200
+          validate_certs: no
+        register: project_status
+        until: project_status | json_query('json.status') == "successful"
+        retries: 5
+        delay: 5
+
+      - name: Create a template
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/job_templates/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"project": {{ project_id }}, "playbook": "survey.yml", "inventory": {{ inventory_id }},  "name": "API created template", "ask_variables_on_launch": "true" }'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: template
+
+      - name: Get template ID
+        set_fact:
+          template_id: "{{ template | json_query('json.id')}}"
+
+      - name: Create a survey
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/job_templates/{{ template_id }}/survey_spec/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{ "name": "API Created Survey", "description": "Survey created from Tower API", "spec": [ { "type": "text", "question_name": "Enter variable 1", "question_description": "Enter value for variable 1", "variable": "variable_1", "required": true, "default": "Hello" }, { "type": "text", "question_name": "Enter variable 2", "question_description": "Enter value for variable 2", "variable": "variable_2", "required": true, "default": "Bye" } ] }'
+          return_content: yes
+          status_code: 200
+          validate_certs: no
+
+      - name: Launch a job with extra vars
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/job_templates/{{ template_id }}/launch/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"extra_vars": {"variable_1": "Hey", "variable_2": "Man"}}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+
+      - name: Create a template
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/job_templates/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"project": {{ project_id }}, "playbook": "hello_world.yml", "credential": "{{ credential_id }}", "inventory": {{ inventory_id }},  "name": "Template 1" }'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: template_2
+
+      - name: Get template ID
+        set_fact:
+          template_2_id: "{{ template_2 | json_query('json.id')}}"
+
+      - name: Create a template
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/job_templates/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"project": {{ project_id }}, "playbook": "hello_world.yml", "credential": "{{ credential_id }}", "inventory": {{ inventory_id }},  "name": "Template 2" }'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: template_3
+
+      - name: Get template ID
+        set_fact:
+          template_3_id: "{{ template_3 | json_query('json.id')}}"
+
+      - name: Create a workflow job template
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/workflow_job_templates/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"name": "Workflow job API created template"}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+        register: workflow_job
+
+      - name: Get workflow template ID
+        set_fact:
+          workflow_id: "{{ workflow_job | json_query('json.id')}}"
+
+      - name: Create workflow template node 1
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/workflow_job_template_nodes/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"workflow_job_template": "{{ workflow_id }}", "unified_job_template": "{{ template_2_id }}"}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+
+      - name: Create workflow template node 2
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/workflow_job_template_nodes/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"workflow_job_template": "{{ workflow_id }}", "unified_job_template": "{{ template_3_id }}"}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+
+
+      - name: Launch a workflow job
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/workflow_job_templates/{{ workflow_id }}/launch/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"workflow_job_template_data":[{"inventory": 1}]}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no
+
+      - name: Kick off a project update
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/projects/{{ project_id }}/update/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"workflow_job_template_data":[{"inventory": 1}]}'
+          return_content: yes
+          status_code: 202
+          validate_certs: no
+
+      - name: Wait for project to be synced
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/projects/{{ project_id }}/"
+          method: GET
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          return_content: yes
+          status_code: 200
+          validate_certs: no
+        register: project_status
+        until: project_status | json_query('json.status') == "successful"
+        retries: 5
+        delay: 5
+
+      - name: Get instances
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/instances/"
+          method: GET
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          return_content: yes
+          status_code: 200
+          validate_certs: no
+        register: instances
+
+      - name: Get instance id
+        set_fact:
+          instance_id: "{{ instances | json_query('json.results[*].id') | first }}"  
+
+      - name: Create instance group
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/instance_groups/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"name":"API Created instance group"}'
+          return_content: yes
+          status_code: 201
+          validate_certs: no  
+        register: instance_group     
+
+      - name: Get instance group id
+        set_fact:
+          group_id: "{{ instance_group | json_query('json.id') }}"  
+
+      - name: Associate instance to instance group 
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/instance_groups/{{ group_id }}/instances/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"id":{{ instance_id }}}'
+          return_content: yes
+          status_code: 204
+          validate_certs: no
+
+      - name: Disassociate instance to instance group 
+        uri:
+          url: "https://{{ tower_hostname }}/api/v2/instance_groups/{{ group_id }}/instances/"
+          method: POST
+          force_basic_auth: no
+          body_format: json
+          headers:
+            Content-Type: application/json
+            Authorization: Bearer {{ tower_api_token }}
+          body: '{"id":{{ instance_id }}, "disassociate": true}'
+          return_content: yes
+          status_code: 204
+          validate_certs: no
