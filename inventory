@@ -1,3 +1,5 @@
+localhost ansible_connection=local
+
 [test_group]
 192.168.42.1
 
