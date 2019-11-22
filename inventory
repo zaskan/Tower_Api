@@ -1,4 +1,6 @@
-localhost ansible_connection=local
+all:
+  - localhost ansible_connection=local
 
-[ec2:vars]
-origin=github
+  - ec2:
+      vars:
+      - origin=github
