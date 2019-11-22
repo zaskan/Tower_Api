@@ -1,7 +1,9 @@
 all:
   hosts:
-    localhost ansible_connection=local
+    localhost 
+      vars: 
+        ansible_connection: local
 
 ec2:
   vars:
-    origin=github
+    origin: github
