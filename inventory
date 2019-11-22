@@ -1,5 +1,5 @@
 [tower]
-localhost ansible_connection=local
+localhost
 
 [ec2:vars]
 origin=github
