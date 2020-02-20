@@ -1,3 +1,5 @@
+# Example using curl 
+# curl -s -k -H 'Content-Type:application/json' -XPATCH https://admin:password@TOWER_URL/api/v2/inventories/<INV_ID>/ -d '{"host_filter": "(name__icontains=test) or (name_icontains=win)", "organization":<ORGID> , "name":"<INVNAME>"}'
 ---
   - name: Test Tower API Resources methods
     hosts: localhost
