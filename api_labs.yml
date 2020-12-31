@@ -3,6 +3,8 @@
 # curl -s -k -H 'Content-Type:application/json' -XPATCH https://admin:password@TOWER_URL/api/v2/inventories/<INV_ID>/ -d '{"host_filter": "(name__icontains=test) or (name_icontains=win)", "organization":<ORGID> , "name":"<INVNAME>"}'
 # Fill an inventory with 100 hosts for testing
 # for i in {1..100}; do curl -s -k -H 'Content-Type:application/json' -PUT https://admin:password@TOWER_URL/api/v2/inventories/1/hosts/ -d '{"name":"instance1'$i'"}' ; done
+# Bulk delete hosts
+# for i in {10..199}; do curl -s -k -H 'Content-Type:application/json' -X DELETE https://admin:password@127.0.0.1/api/v2/hosts/$i/  ; done
 ---
   - name: Test Tower API Resources methods
     hosts: localhost
